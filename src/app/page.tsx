@@ -24,11 +24,7 @@ const formatClassName = (name: string): string => {
 };
 
 export default function Home() {
-  const [input, setInput] = useState(
-    `<div class="text-xl bg-blue-500 p-4">
-  <div class="text-xl bg-red-500 p-4">Hello World</div>
-</div>`
-  );
+  const [input, setInput] = useState('');
   const [customClassName, setCustomClassName] = useState('');
   const [result, setResult] = useState<{
     originalHtml: string;
@@ -38,6 +34,7 @@ export default function Home() {
   const [copied, setCopied] = useState<'html' | 'css' | null>(null);
   const [classMappings, setClassMappings] = useState<ClassMapping[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const [skipCustomClasses, setSkipCustomClasses] = useState(false);
 
@@ -49,6 +46,13 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    if (!input.trim()) {
+      setError('Please enter some HTML/JSX with Tailwind classes');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -66,7 +70,7 @@ export default function Home() {
 
       const data = await response.json();
       if (data.error) {
-        console.error('Error:', data.error);
+        setError(data.error);
         return;
       }
       setResult(data);
@@ -87,6 +91,7 @@ export default function Home() {
         isEditing: false
       })));
     } catch (error) {
+      setError('Failed to process the request. Please try again.');
       console.error('Error:', error);
     } finally {
       setLoading(false);
@@ -164,6 +169,16 @@ export default function Home() {
     return formattedCode;
   };
 
+  const clearAll = () => {
+    setInput('');
+    setCustomClassName('');
+    setResult(null);
+    setCopied(null);
+    setClassMappings([]);
+    setError(null);
+    setSkipCustomClasses(false);
+  };
+
   return (
     <main className="min-h-screen bg-[#0F172A] text-white relative overflow-hidden">
       {/* Background decoration */}
@@ -173,7 +188,7 @@ export default function Home() {
       <div className="absolute top-0 -right-4 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000" />
       <div className="absolute -bottom-8 left-20 w-72 h-72 bg-teal-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000" />
 
-      <div className="max-w-7xl mx-auto px-4 py-12 relative">
+      <div className="max-w-7xl mx-auto px-4 py-12 pb-24 relative">
         {/* Header */}
         <div className="text-center mb-16 space-y-4">
           <div className="flex items-center justify-center space-x-3 mb-6">
@@ -197,6 +212,19 @@ export default function Home() {
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Input Section */}
           <div className="bg-[#1E293B]/40 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/5 p-8">
+            <div className="flex justify-between items-start mb-6">
+              <h2 className="text-lg font-semibold text-blue-200">Input</h2>
+              <button
+                onClick={clearAll}
+                className="px-3 py-1.5 text-xs text-blue-200/60 hover:text-blue-200 border border-blue-500/20 hover:border-blue-500/40 rounded-xl transition-all duration-200 flex items-center space-x-1"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-3.5 h-3.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Clear All</span>
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="input" className="block text-sm font-medium text-blue-200 mb-2">
@@ -208,10 +236,13 @@ export default function Home() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     className="w-full h-64 p-4 bg-[#0F172A]/60 border border-blue-500/20 rounded-2xl text-blue-100 font-mono text-sm focus:ring-2 focus:ring-cyan-500/50 focus:border-transparent transition-all duration-200 placeholder-blue-300/20"
-                    placeholder="<div class='text-xl bg-blue-500 p-4'>\n  <div class='text-xl bg-red-500 p-4'>Hello World</div>\n</div>"
+                    placeholder="<div class='text-xl bg-blue-500 p-4'>Hello World</div>"
                   />
                   <CodeBracketIcon className="absolute top-4 right-4 w-5 h-5 text-cyan-400/30 group-hover:text-cyan-400/50 transition-colors duration-200" />
                 </div>
+                {error && (
+                  <p className="mt-2 text-sm text-red-400">{error}</p>
+                )}
               </div>
 
               <div>
@@ -231,7 +262,7 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col space-y-2">
                 <label className="relative flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -242,6 +273,9 @@ export default function Home() {
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   <span className="ms-3 text-sm font-medium text-blue-200">Skip Custom Classes</span>
                 </label>
+                <div className="text-xs text-blue-300/60">
+                  When enabled, non-Tailwind classes will be removed from the output
+                </div>
               </div>
 
               <button
@@ -350,6 +384,27 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="absolute bottom-0 left-0 right-0 p-6 text-center">
+        <div className="flex items-center justify-center space-x-2 text-blue-200/60 hover:text-blue-200 transition-colors duration-200 text-xs">
+          <span>Made with ❤️ by Mohamed Shuaau</span>
+          <a
+            href="https://github.com/mohammedshuaau"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center hover:text-cyan-400 transition-colors duration-200"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4 ml-1"
+              fill="currentColor"
+            >
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+            </svg>
+          </a>
+        </div>
+      </footer>
     </main>
   );
 }
