@@ -1,40 +1,131 @@
 import { NextResponse } from 'next/server';
 import postcss from 'postcss';
-import postcssJs from 'postcss-js';
-import resolveConfig from 'tailwindcss/resolveConfig';
-import tailwindConfig from '../../../../tailwind.config';
+import tailwindcss from 'tailwindcss';
 
-const fullConfig = resolveConfig(tailwindConfig);
+// Create a minimal Tailwind config
+const minimalConfig = {
+  content: [],
+  theme: {
+    extend: {},
+  },
+  corePlugins: {
+    preflight: false
+  },
+  plugins: [],
+};
 
 export async function POST(request: Request) {
   try {
-    const { classes, html } = await request.json();
+    const { html, customClassName } = await request.json();
     
-    // Create a minimal CSS string with the provided classes
-    const css = `.compiled { ${classes.join(' ')} }`;
+    // Find all class and className attributes and their values
+    const classRegex = /(?:class|className)="([^"]*)"/g;
+    let match;
+    const elementClasses: { original: string; classes: string[]; isJsx: boolean }[] = [];
     
-    // Process the CSS with Tailwind's JIT compiler
-    const root = postcss.parse(css);
-    const processed = postcssJs.objectify(root);
+    // Extract all class combinations
+    while ((match = classRegex.exec(html)) !== null) {
+      const isJsx = match[0].startsWith('className');
+      elementClasses.push({
+        original: match[0],
+        classes: match[1].split(' ').filter(Boolean),
+        isJsx
+      });
+    }
+
+    // Process each unique class combination
+    const classMap = new Map<string, string>();
+    const cssResults: string[] = [];
     
-    // Extract the compiled styles
-    const compiledStyles = processed.compiled || {};
-    
-    // Generate a unique class name
-    const uniqueClassName = `element-${Math.floor(Math.random() * 1000000)}`;
-    
-    // Format the response
-    const result = {
-      jsx: html.replace(/class="/g, 'className="').replace(/class=/g, 'className='),
-      className: uniqueClassName,
-      styles: {
-        [`.${uniqueClassName}`]: compiledStyles
+    for (let i = 0; i < elementClasses.length; i++) {
+      const { original, classes } = elementClasses[i];
+      const classKey = classes.sort().join(' ');
+      
+      // Skip if we've already processed this combination
+      if (classMap.has(classKey)) continue;
+      
+      // Generate a unique class name
+      const uniqueClassName = customClassName 
+        ? `${customClassName}-${i + 1}` 
+        : `breeze-${Math.floor(Math.random() * 1000000)}`;
+      
+      classMap.set(classKey, uniqueClassName);
+      
+      // Create CSS content for this class combination
+      const cssContent = `
+        @tailwind utilities;
+        
+        .${uniqueClassName} {
+          @apply ${classes.join(' ')};
+        }
+      `;
+
+      // Process the CSS
+      const result = await postcss([
+        tailwindcss({
+          ...minimalConfig,
+          content: [{
+            raw: `<div class="${classes.join(' ')}">test</div>`,
+            extension: 'html'
+          }]
+        })
+      ]).process(cssContent, {
+        from: undefined
+      });
+
+      // Extract the complete CSS for the Breeze class
+      const lines = result.css.split('\n');
+      let compiledCss = '';
+      let insideBreezeClass = false;
+      let braceCount = 0;
+
+      for (const line of lines) {
+        if (line.includes(uniqueClassName)) {
+          insideBreezeClass = true;
+          braceCount = 0;
+        }
+        
+        if (insideBreezeClass) {
+          compiledCss += line + '\n';
+          braceCount += (line.match(/{/g) || []).length;
+          braceCount -= (line.match(/}/g) || []).length;
+          
+          if (braceCount === 0 && compiledCss.includes('}')) {
+            insideBreezeClass = false;
+          }
+        }
       }
+
+      cssResults.push(compiledCss.trim());
+    }
+
+    // Replace original classes with new unique class names
+    let modifiedHtml = html;
+    for (const { original, classes, isJsx } of elementClasses) {
+      const classKey = classes.sort().join(' ');
+      const uniqueClassName = classMap.get(classKey);
+      if (uniqueClassName) {
+        const attributeName = isJsx ? 'className' : 'class';
+        modifiedHtml = modifiedHtml.replace(
+          original,
+          `${attributeName}="${uniqueClassName}"`
+        );
+      }
+    }
+
+    // Format the response
+    const response = {
+      originalHtml: html,
+      modifiedHtml: modifiedHtml,
+      styles: cssResults.join('\n\n')
     };
     
-    return NextResponse.json(result);
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error processing request:', error);
-    return NextResponse.json({ error: 'Failed to process classes' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to process classes',
+      details: String(error)
+    }, { status: 500 });
   }
 } 
