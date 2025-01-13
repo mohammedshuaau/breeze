@@ -18,17 +18,18 @@ export async function POST(request: Request) {
   try {
     const { html, customClassName } = await request.json();
     
-    // Find all class and className attributes and their values
-    const classRegex = /(?:class|className)="([^"]*)"/g;
+    // Find all class and className attributes and their values, including object syntax
+    const classRegex = /(?:class|className)=(?:"([^"]*)"|'([^']*)'|\{["']([^"']*)["']\})/g;
     let match;
     const elementClasses: { original: string; classes: string[]; isJsx: boolean }[] = [];
     
     // Extract all class combinations
     while ((match = classRegex.exec(html)) !== null) {
       const isJsx = match[0].startsWith('className');
+      const classes = (match[1] || match[2] || match[3]).split(' ').filter(Boolean);
       elementClasses.push({
         original: match[0],
-        classes: match[1].split(' ').filter(Boolean),
+        classes,
         isJsx
       });
     }
@@ -99,17 +100,17 @@ export async function POST(request: Request) {
       cssResults.push(compiledCss.trim());
     }
 
-    // Replace original classes with new unique class names
+    // Replace original classes with new unique class names, preserving syntax
     let modifiedHtml = html;
     for (const { original, classes, isJsx } of elementClasses) {
       const classKey = classes.sort().join(' ');
       const uniqueClassName = classMap.get(classKey);
       if (uniqueClassName) {
         const attributeName = isJsx ? 'className' : 'class';
-        modifiedHtml = modifiedHtml.replace(
-          original,
-          `${attributeName}="${uniqueClassName}"`
-        );
+        const newValue = original.includes('{') ? 
+          `${attributeName}={"${uniqueClassName}"}` : 
+          `${attributeName}="${uniqueClassName}"`;
+        modifiedHtml = modifiedHtml.replace(original, newValue);
       }
     }
 

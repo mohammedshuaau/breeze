@@ -71,10 +71,13 @@ export default function Home() {
 
       // Extract and set initial class mappings
       const classNames = new Set<string>();
-      const classRegex = /(?:class|className)="([^"]+)"/g;
+      const classRegex = /(?:class|className)=(?:"([^"]*)"|'([^']*)'|\{["']([^"']*)["']\})/g;
       let match;
       while ((match = classRegex.exec(data.modifiedHtml)) !== null) {
-        classNames.add(match[1]);
+        const className = match[1] || match[2] || match[3];
+        if (className) {
+          classNames.add(className);
+        }
       }
       setClassMappings(Array.from(classNames).map(name => ({
         oldName: name,
